@@ -26,6 +26,10 @@ main{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:clamp(18p
 .top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
 h1{margin:0;font-size:clamp(24px,5.4vw,42px);line-height:1.05;font-weight:400}
 .hi{white-space:nowrap;display:flex;gap:16px;align-items:center}
+.score{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.mini{background:transparent;border:2px solid var(--soft);border-radius:4px;min-height:44px;padding:0 12px;cursor:pointer}
+.mini:hover{border-color:var(--ink)}
+.mini[data-arm]{border-color:#d93025;color:#d93025}
 .hi i{display:inline-block;width:11px;height:11px;margin-right:7px;vertical-align:-1px}
 .view{display:flex;flex-direction:column;gap:22px;flex:1}
 .view[hidden]{display:none}
@@ -91,7 +95,7 @@ h1{margin:0;font-size:clamp(24px,5.4vw,42px);line-height:1.05;font-weight:400}
 <main>
   <header class="top">
     <h1>DINO DASH</h1>
-    <div class="hi" id="hi" aria-label="Wins on this device"></div>
+    <div class="score"><div class="hi" id="hi" aria-label="Wins"></div><button class="mini" id="rst" aria-label="Reset win counter">RESET</button></div>
   </header>
 
   <section class="view" id="pick">
@@ -161,6 +165,8 @@ let store={};try{store=JSON.parse(localStorage.getItem('dinodash')||'{}')||{}}ca
 const save=()=>{try{localStorage.setItem('dinodash',JSON.stringify(store))}catch(e){}};
 const wins=Object.assign({m:0,r:0},store.wins);
 let limit=LIMITS.includes(store.limit)?store.limit:100, limitAt=0;
+let resetAt=+store.resetAt||0;
+function resetWins(at){wins.m=0;wins.r=0;resetAt=at;store.wins=wins;store.resetAt=at;save();drawHi()}
 const drawHi=()=>{$('#hi').innerHTML=`<span><i style="background:var(--blue)"></i>M ${String(wins.m).padStart(2,'0')}</span><span><i style="background:var(--yel)"></i>R ${String(wins.r).padStart(2,'0')}</span>`};
 const drawLim=()=>{$$('#lim button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.l===limit));$('#goal').textContent=`RACE TO ${limit}`;draw('m');draw('r')};
 
@@ -272,7 +278,7 @@ function enter(m,w){
     p.addEventListener('pointerdown',e=>{e.preventDefault();p.classList.add('hit');setTimeout(()=>p.classList.remove('hit'),60);act(mode==='local'?p.dataset.who:me)});
     p.addEventListener('click',e=>{if(e.detail===0)act(mode==='local'?p.dataset.who:me)});
   });
-  if(m==='net')pres({who:w,st:'idle',round,count:0,fin:null,limit,limitAt});
+  if(m==='net')pres({who:w,st:'idle',round,count:0,fin:null,limit,limitAt,resetAt});
   if(document.activeElement)document.activeElement.blur();
   peersChanged();ui();
 }
@@ -285,6 +291,12 @@ function back(){
 }
 $$('.pick').forEach(b=>b.addEventListener('click',()=>enter('net',b.dataset.who)));
 $('#local').addEventListener('click',()=>enter('local',null));
+// two-tap reset: RESET → SURE? → cleared (on both phones when online)
+$('#rst').addEventListener('click',()=>{
+  const b=$('#rst');
+  if(b.dataset.arm){delete b.dataset.arm;b.textContent='RESET';resetWins(Date.now());pres({resetAt});blip(220,.12)}
+  else{b.dataset.arm='1';b.textContent='SURE?';setTimeout(()=>{if(b.dataset.arm){delete b.dataset.arm;b.textContent='RESET'}},3000)}
+});
 $('#back').addEventListener('click',back);
 $$('#lim button').forEach(b=>b.addEventListener('click',()=>{limit=+b.dataset.l;limitAt=Date.now();store.limit=limit;save();drawLim();pres({limit,limitAt})}));
 
@@ -317,6 +329,7 @@ function peersChanged(){
   $$('.pick').forEach(b=>b.querySelector('.here').hidden=!here[b.dataset.who]);
   // follow the newest race length chosen by anyone
   if(phase!=='count'&&phase!=='race')for(const p of others){const o=p.presence;if(LIMITS.includes(o.limit)&&+o.limitAt>limitAt){limit=o.limit;limitAt=+o.limitAt;drawLim()}}
+  for(const p of others){const r=+p.presence.resetAt||0;if(r>resetAt&&r<Date.now()+60000)resetWins(r)}
   netLine();
   if(mode!=='net'||!me){opp=null;return}
   const O=other(me);
